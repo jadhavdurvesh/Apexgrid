@@ -1,49 +1,36 @@
-"""FastAPI stub — wraps the simulation kernel over HTTP.
-
-v0.1: one synchronous endpoint that runs a race and returns the result.
-Next steps (Bible Part X): move this to WebSocket streaming so the client
-watches the race lap-by-lap in real time instead of getting the result in
-one shot, and back it with a real database instead of running everything
-in memory per-request.
-"""
-from fastapi import FastAPI
+"""APEXGRID production API: REST + live WebSocket world feed."""
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
-
 from .simulation.grid_generator import generate_grid
 from .simulation.engine import RaceEngine
 from .simulation import history
+from . import world
 
-app = FastAPI(title="APEXGRID API", version="0.1.0")
-
-
+app=FastAPI(title="APEXGRID API",version="0.2.0")
+app.add_middleware(CORSMiddleware,allow_origins=["*"],allow_credentials=False,allow_methods=["*"],allow_headers=["*"])
 class RaceRequest(BaseModel):
-    seed: Optional[int] = None
-    laps: int = 55
-
-
+ seed:Optional[int]=None
+ laps:int=55
 @app.get("/")
-def root():
-    return {"name": "APEXGRID", "status": "kernel v0.1 — one race per request, no persistence layer yet"}
-
-
+def root():return {"name":"APEXGRID","status":"online","version":"0.2.0"}
+@app.get("/health")
+def health():return {"status":"ok","world":world.snapshot()["state"]}
+@app.get("/world")
+def get_world():return world.snapshot()
 @app.post("/race/run")
-def run_race(req: RaceRequest):
-    teams, drivers = generate_grid(seed=req.seed)
-    engine = RaceEngine(teams, drivers, total_laps=req.laps, seed=req.seed)
-    result = engine.run()
-
-    summary = {
-        "track": engine.track_name,
-        "laps": req.laps,
-        "classification": result.classification,
-        "fastest_lap": result.fastest_lap,
-        "event_count": len(result.events),
-    }
-    history.save_race_result(summary)
-    return summary
-
-
+def run_race(req:RaceRequest):
+ teams,drivers=generate_grid(seed=req.seed);engine=RaceEngine(teams,drivers,total_laps=req.laps,seed=req.seed);result=engine.run()
+ summary={"track":engine.track_name,"laps":req.laps,"classification":result.classification,"fastest_lap":result.fastest_lap,"event_count":len(result.events)}
+ history.save_race_result(summary);world.update(state="RACE_COMPLETE",track=engine.track_name,lap=req.laps,lap_total=req.laps,message="Race complete");return summary
 @app.get("/history")
-def get_history():
-    return history.load_history()
+def get_history():return history.load_history()
+@app.websocket("/ws/live")
+async def live(ws:WebSocket):
+ await ws.accept();q=world.subscribe()
+ try:
+  await ws.send_json({"type":"world","data":world.snapshot()})
+  while True:await ws.send_json(await q.get())
+ except (WebSocketDisconnect,RuntimeError):pass
+ finally:world.unsubscribe(q)
