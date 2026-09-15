@@ -2,48 +2,42 @@
 
 ## Architecture
 
-APEXGRID is split into a static frontend and a persistent simulation worker:
-
-- `frontend/` — static live dashboard, suitable for GitHub Pages.
-- `backend/app/main.py` — FastAPI REST + WebSocket API.
-- `backend/app/world_runner.py` — persistent championship process.
-- `backend/app/simulation/` — actual lap-by-lap simulation kernel.
+- `frontend/` is a static live dashboard and is deployed by GitHub Pages.
+- `backend/` contains FastAPI and the simulation engine.
+- `backend/app/world_runner.py` is the persistent world worker.
+- Production persistence should use PostgreSQL/Supabase; SQLite is for local development/tests.
 
 ## GitHub Pages
 
-The repository includes `.github/workflows/pages.yml`. Enable **Settings → Pages → Source: GitHub Actions**. Every push to `main` publishes `frontend/`.
+Enable **Settings → Pages → Source: GitHub Actions**. The `pages.yml` workflow publishes `frontend/` from `main`.
 
-The frontend needs the deployed API URL. Before loading `app.js`, production hosting can set `window.APEXGRID_API_URL`; otherwise the dashboard falls back to local development at `http://localhost:8000`.
+The browser needs the production API URL. For a simple deployment, set `window.APEXGRID_API_URL` before `app.js` loads, or configure it in `frontend/app.js`.
 
 ## Persistent worker
 
-GitHub Pages cannot execute Python or keep a simulation process alive. The worker must run on a compute service. `render.yaml` contains a web service and a worker service definition.
-
-Default compressed championship timing:
-
-- Practice: 5 minutes
-- Qualifying: 20 minutes
-- Race: 90 minutes
-- Gap between rounds: 2 hours
-- Gap between seasons: 4 hours
-- 24 rounds per season
-
-Set `APEXGRID_RACE_MINUTES` to change the real wall-clock duration. The race engine is paced while its actual per-lap physics/AI loop executes; it is not a precomputed result followed by a fake animation.
-
-For a portfolio/demo deployment, use shorter values such as `APEXGRID_RACE_MINUTES=2`, `APEXGRID_QUALIFYING_MINUTES=1`, and `APEXGRID_PRACTICE_MINUTES=1`. For the intended long-running world, restore the defaults.
-
-## Persistence
-
-The current local development database is SQLite. Production should use persistent PostgreSQL/Supabase storage so a worker restart does not erase championship history. The JSON world snapshot is also intended as a local/dev resume mechanism; production persistence should be moved to the shared database.
-
-## Local
+Run the worker on an always-on VM/container:
 
 ```bash
 cd backend
-python -m venv .venv
-# Windows: .venv\\Scripts\\activate
-# Linux/macOS: source .venv/bin/activate
 pip install -r requirements.txt
+python -m app.world_runner
+```
+
+The worker continuously runs 24 rounds per season and then starts the next season. Race duration defaults to 90 minutes and can be changed with `APEXGRID_RACE_MINUTES`.
+
+## Live 2D viewer
+
+The dashboard connects to `/ws/live`. During a race, the backend publishes lap state, driver telemetry, weather and race events. The browser renders each car on a 2D circuit path and smoothly advances it between server updates.
+
+## Cloud note
+
+GitHub Pages cannot execute the Python worker. Use an always-on VM/container for the worker/API. A free VM may be suitable for development, but free compute quotas and availability can change; do not treat a provider's free tier as a permanent SLA.
+
+## Local demo
+
+```bash
+cd backend
+python -m pytest tests/ -v
 uvicorn app.main:app --reload
 ```
 
@@ -51,7 +45,7 @@ In a second terminal:
 
 ```bash
 cd backend
-python -m app.world_runner
+APEXGRID_RACE_MINUTES=2 APEXGRID_PRACTICE_MINUTES=0 APEXGRID_QUALIFYING_MINUTES=0 APEXGRID_ROUND_GAP_HOURS=0 APEXGRID_SEASON_GAP_HOURS=0 python -m app.world_runner
 ```
 
-Then serve `frontend/` with any static HTTP server and point it at the API.
+Use short durations for development only. Production should use the real-time values.
