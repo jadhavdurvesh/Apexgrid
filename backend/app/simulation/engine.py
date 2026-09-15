@@ -48,7 +48,8 @@ class RaceEngine:
     def __init__(self, teams: Dict[str, Team], drivers: Dict[str, Driver],
                  total_laps: int = 55, track_name: str = "Meridian Circuit",
                  seed: int = None, base_lap_time: float = 92.0,
-                 grid_order: Optional[List[str]] = None, weather: Optional[Weather] = None):
+                 grid_order: Optional[List[str]] = None, weather: Optional[Weather] = None,
+                 on_lap=None):
         self.teams = teams
         self.drivers = drivers
         self.total_laps = total_laps
@@ -62,6 +63,7 @@ class RaceEngine:
         self.stewards = Stewards()
         self.events: List[LapEvent] = []
         self.fastest_lap = None  # {"driver_id", "driver_name", "lap", "time"}
+        self.on_lap = on_lap
 
         self.cars: Dict[str, CarState] = {}
         fuel_per_lap = 92.0 / total_laps  # roughly burns full tank across race distance
@@ -235,6 +237,9 @@ class RaceEngine:
                                          "lap": lap, "time": round(lap_times[did], 3)}
                 self.cars[did].last_lap_time = lap_times[did]
                 self.cars[did].total_time = cumulative[did]
+
+            if self.on_lap is not None:
+                self.on_lap(self, lap, cumulative, lap_times)
 
         return self._finalize(cumulative)
 
