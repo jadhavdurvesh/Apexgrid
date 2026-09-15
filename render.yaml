@@ -5,10 +5,22 @@ services:
     dockerfilePath: ./backend/Dockerfile
     autoDeploy: true
     healthCheckPath: /health
+
   - type: worker
     name: apexgrid-world
     env: python
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    startCommand: python -m app.world_worker
+    startCommand: python -m app.world_runner
     autoDeploy: true
+    envVars:
+      - key: APEXGRID_RACE_MINUTES
+        value: "90"
+      - key: APEXGRID_QUALIFYING_MINUTES
+        value: "20"
+      - key: APEXGRID_PRACTICE_MINUTES
+        value: "5"
+      - key: APEXGRID_ROUND_GAP_HOURS
+        value: "2"
+      - key: APEXGRID_SEASON_GAP_HOURS
+        value: "4"
