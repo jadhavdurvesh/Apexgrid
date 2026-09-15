@@ -3,13 +3,25 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
+import threading
 from .simulation.grid_generator import generate_grid
 from .simulation.engine import RaceEngine
 from .simulation import history
 from . import world
+from . import world_runner
 
 app=FastAPI(title="APEXGRID API",version="0.2.0")
 app.add_middleware(CORSMiddleware,allow_origins=["*"],allow_credentials=False,allow_methods=["*"],allow_headers=["*"])
+
+_world_thread=None
+@app.on_event("startup")
+def start_world_runner():
+    global _world_thread
+    if _world_thread is not None and _world_thread.is_alive():
+        return
+    _world_thread=threading.Thread(target=world_runner.main,daemon=True,name="apexgrid-world-runner")
+    _world_thread.start()
+
 class RaceRequest(BaseModel):
  seed:Optional[int]=None
  laps:int=55
