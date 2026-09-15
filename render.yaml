@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: apexgrid-api
+    env: docker
+    dockerfilePath: ./backend/Dockerfile
+    autoDeploy: true
+    healthCheckPath: /health
+  - type: worker
+    name: apexgrid-world
+    env: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m app.world_worker
+    autoDeploy: true
